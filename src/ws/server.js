@@ -1,5 +1,6 @@
 import {WebSocket , WebSocketServer} from "ws"
 import { tr } from "zod/locales";
+import { wsArcjet } from "../arcjet.js";
 
 
 
@@ -24,7 +25,24 @@ export function attachWebSocketServer(server){
         maxPayload:1024 * 1024
     });
 
-    wss.on('connection',(socket)=>{
+    wss.on('connection',async(socket,req)=>{
+        if(wsArcjet){
+            try{
+                const decision = await wsArcjet.protect(req);
+                if(decision.isDenied()){
+                    const code = decision.reason.isRateLimit() ? 1013 : 1008;
+                    const reason = decision.reason.isRateLimit() ? 'Rate Limit Exceeded' : 'Access denied';
+                    socket.close(code,reason);
+                    return;
+                }
+            }catch(err){
+                console.error("WS connection error : ",err);
+                socket.close(1011,'Server Security Error');
+                return;
+            }
+        }
+
+
         socket.isAlive = true;
         socket.on('pong',()=>{socket.isAlive = true});
 
@@ -41,7 +59,7 @@ export function attachWebSocketServer(server){
         });
     },30000);
 
-    ws.on('close',()=>clearInterval(interval));
+    wss.on('close',()=>clearInterval(interval));
 
     function broadcastMatchCreated(match){
         broadcast(wss , {type:'match_created' , data:match});
@@ -49,3 +67,5 @@ export function attachWebSocketServer(server){
 
     return {broadcastMatchCreated}
 }
+
+//2.26
