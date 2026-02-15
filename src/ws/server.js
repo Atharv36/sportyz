@@ -25,31 +25,51 @@ export function attachWebSocketServer(server){
         maxPayload:1024 * 1024
     });
 
-    wss.on('connection',async(socket,req)=>{
-        if(wsArcjet){
-            try{
+    server.on('upgrade', async (req, socket, head) => {
+        const { pathname } = new URL(req.url, `http://${req.headers.host}`);
+
+        if (pathname !== '/ws') {
+            socket.destroy()
+            return;
+        }
+
+        if (wsArcjet) {
+            try {
                 const decision = await wsArcjet.protect(req);
-                if(decision.isDenied()){
-                    const code = decision.reason.isRateLimit() ? 1013 : 1008;
-                    const reason = decision.reason.isRateLimit() ? 'Rate Limit Exceeded' : 'Access denied';
-                    socket.close(code,reason);
+
+                if (decision.isDenied()) {
+                    if (decision.reason.isRateLimit()) {
+                        socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+                    } else {
+                        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+                    }
+                    socket.destroy();
                     return;
                 }
-            }catch(err){
-                console.error("WS connection error : ",err);
-                socket.close(1011,'Server Security Error');
+            } catch (e) {
+                console.error('WS upgrade protection error', e);
+                socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
+                socket.destroy();
                 return;
             }
         }
 
-
-        socket.isAlive = true;
-        socket.on('pong',()=>{socket.isAlive = true});
-
-
-        sendJson(socket , {type : 'welcome'});
-        socket.on('error',console.error);
+        wss.handleUpgrade(req, socket, head, (ws) => {
+            wss.emit('connection', ws, req);
+        });
     });
+    wss.on('connection', (socket) => {
+    socket.isAlive = true;
+
+    socket.on('pong', () => {
+        socket.isAlive = true;
+    });
+
+    sendJson(socket, { type: 'welcome' });
+
+    socket.on('error', console.error);
+});
+
 
     const interval = setInterval(()=>{
         wss.clients.forEach((ws)=>{
