@@ -8,6 +8,13 @@
       "when": 1771001826273,
       "tag": "0000_misty_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1771345413123,
+      "tag": "0001_massive_sasquatch",
+      "breakpoints": true
     }
   ]
 }
